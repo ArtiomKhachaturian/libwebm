@@ -184,8 +184,6 @@ class Frame {
 
   // Flag indicating if |reference_block_timestamp_| has been set.
   bool reference_block_timestamp_set_;
-
-  LIBWEBM_DISALLOW_COPY_AND_ASSIGN(Frame);
 };
 
 ///////////////////////////////////////////////////////////////

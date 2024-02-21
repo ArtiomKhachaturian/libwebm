@@ -236,7 +236,7 @@ bool Frame::Init(const uint8_t* frame, uint64_t length) {
 
 bool Frame::Init(const std::shared_ptr<FrameMemory>& frame)
 {
-    if (frame && frame->GetData()) {
+    if (frame && frame->GetData() && frame->GetSize()) {
         frame_ = frame;
         return true;
     }
@@ -257,7 +257,7 @@ bool Frame::AddAdditionalData(const uint8_t* additional, uint64_t length,
 bool Frame::AddAdditionalData(const std::shared_ptr<FrameMemory>& additional,
                               uint64_t add_id)
 {
-    if (additional && additional->GetData()) {
+    if (additional && additional->GetData() && additional->GetSize()) {
         additional_ = additional;
         add_id_ = add_id;
         return true;
