@@ -83,6 +83,24 @@ bool CopyChromaticity(const PrimaryChromaticity* src,
   return true;
 }
 
+class FrameMemoryBlock : public FrameMemory
+{
+public:
+    FrameMemoryBlock(const uint8_t* data, uint64_t length);
+    // impl. of FrameMemory
+    const uint8_t* GetData() const final { return data_.get(); }
+    uint64_t GetSize() const final { return length_; }
+private:
+    const std::unique_ptr<const uint8_t[]> data_;
+    const uint64_t length_;
+};
+
+FrameMemoryBlock::FrameMemoryBlock(const uint8_t* data, uint64_t length)
+    : data_(data)
+    , length_(length)
+{
+}
+
 }  // namespace
 
 ///////////////////////////////////////////////////////////////
@@ -173,12 +191,10 @@ bool ChunkedCopy(mkvparser::IMkvReader* source, mkvmuxer::IMkvWriter* dst,
 Frame::Frame()
     : add_id_(0),
       additional_(NULL),
-      additional_length_(0),
       duration_(0),
       duration_set_(false),
       frame_(NULL),
       is_key_(false),
-      length_(0),
       track_number_(0),
       timestamp_(0),
       discard_padding_(0),
@@ -186,25 +202,15 @@ Frame::Frame()
       reference_block_timestamp_set_(false) {}
 
 Frame::~Frame() {
-  delete[] frame_;
-  delete[] additional_;
 }
 
 bool Frame::CopyFrom(const Frame& frame) {
-  delete[] frame_;
-  frame_ = NULL;
-  length_ = 0;
-  if (frame.length() > 0 && frame.frame() != NULL &&
-      !Init(frame.frame(), frame.length())) {
+  frame_.reset();
+  if (frame.frame_ && !Init(frame.frame_)) {
     return false;
   }
   add_id_ = 0;
-  delete[] additional_;
-  additional_ = NULL;
-  additional_length_ = 0;
-  if (frame.additional_length() > 0 && frame.additional() != NULL &&
-      !AddAdditionalData(frame.additional(), frame.additional_length(),
-                         frame.add_id())) {
+  if (frame.additional_ && !AddAdditionalData(frame.additional_, frame.add_id())) {
     return false;
   }
   duration_ = frame.duration();
@@ -224,12 +230,17 @@ bool Frame::Init(const uint8_t* frame, uint64_t length) {
   if (!data)
     return false;
 
-  delete[] frame_;
-  frame_ = data;
-  length_ = length;
+  memcpy(data, frame, static_cast<size_t>(length));
+  return Init(std::make_shared<FrameMemoryBlock>(data, length));
+}
 
-  memcpy(frame_, frame, static_cast<size_t>(length_));
-  return true;
+bool Frame::Init(const std::shared_ptr<FrameMemory>& frame)
+{
+    if (frame && frame->GetData()) {
+        frame_ = frame;
+        return true;
+    }
+    return false;
 }
 
 bool Frame::AddAdditionalData(const uint8_t* additional, uint64_t length,
@@ -239,21 +250,26 @@ bool Frame::AddAdditionalData(const uint8_t* additional, uint64_t length,
   if (!data)
     return false;
 
-  delete[] additional_;
-  additional_ = data;
-  additional_length_ = length;
-  add_id_ = add_id;
+  memcpy(data, additional, static_cast<size_t>(length));
+  return AddAdditionalData(std::make_shared<FrameMemoryBlock>(data, length), add_id);
+}
 
-  memcpy(additional_, additional, static_cast<size_t>(additional_length_));
-  return true;
+bool Frame::AddAdditionalData(const std::shared_ptr<FrameMemory>& additional,
+                              uint64_t add_id)
+{
+    if (additional && additional->GetData()) {
+        additional_ = additional;
+        add_id_ = add_id;
+        return true;
+    }
+    return false;
 }
 
 bool Frame::IsValid() const {
-  if (length_ == 0 || !frame_) {
+  if (!frame_ || frame_->GetSize() == 0) {
     return false;
   }
-  if ((additional_length_ != 0 && !additional_) ||
-      (additional_ != NULL && additional_length_ == 0)) {
+  if (additional_ && additional_->GetSize() == 0) {
     return false;
   }
   if (track_number_ == 0 || track_number_ > kMaxTrackNumber) {
@@ -267,6 +283,22 @@ bool Frame::IsValid() const {
 
 bool Frame::CanBeSimpleBlock() const {
   return additional_ == NULL && discard_padding_ == 0 && duration_ == 0;
+}
+
+const uint8_t* Frame::additional() const {
+    return additional_ ? additional_->GetData() : nullptr;
+}
+
+uint64_t Frame::additional_length() const {
+    return additional_ ? additional_->GetSize() : 0;
+}
+
+const uint8_t* Frame::frame() const {
+    return frame_ ? frame_->GetData() : nullptr;
+}
+
+uint64_t Frame::length() const {
+    return frame_ ? frame_->GetSize() : 0;
 }
 
 void Frame::set_duration(uint64_t duration) {

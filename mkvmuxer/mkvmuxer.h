@@ -13,6 +13,7 @@
 
 #include <cstddef>
 #include <list>
+#include <memory>
 #include <map>
 
 #include "common/webmids.h"
@@ -83,6 +84,16 @@ bool ChunkedCopy(mkvparser::IMkvReader* source, IMkvWriter* dst, int64_t start,
                  int64_t size);
 
 ///////////////////////////////////////////////////////////////
+// Abstraction around of frame memory block
+class FrameMemory
+{
+public:
+    virtual ~FrameMemory() = default;
+    virtual const uint8_t* GetData() const = 0;
+    virtual uint64_t GetSize() const = 0;
+};
+
+///////////////////////////////////////////////////////////////
 // Class to hold data the will be written to a block.
 class Frame {
  public:
@@ -95,9 +106,14 @@ class Frame {
 
   // Copies |frame| data into |frame_|. Returns true on success.
   bool Init(const uint8_t* frame, uint64_t length);
+    
+  bool Init(const std::shared_ptr<FrameMemory>& frame);
 
   // Copies |additional| data into |additional_|. Returns true on success.
   bool AddAdditionalData(const uint8_t* additional, uint64_t length,
+                         uint64_t add_id);
+  
+  bool AddAdditionalData(const std::shared_ptr<FrameMemory>& additional,
                          uint64_t add_id);
 
   // Returns true if the frame has valid parameters.
@@ -108,15 +124,15 @@ class Frame {
   bool CanBeSimpleBlock() const;
 
   uint64_t add_id() const { return add_id_; }
-  const uint8_t* additional() const { return additional_; }
-  uint64_t additional_length() const { return additional_length_; }
+  const uint8_t* additional() const;
+  uint64_t additional_length() const;
   void set_duration(uint64_t duration);
   uint64_t duration() const { return duration_; }
   bool duration_set() const { return duration_set_; }
-  const uint8_t* frame() const { return frame_; }
+  const uint8_t* frame() const;
   void set_is_key(bool key) { is_key_ = key; }
   bool is_key() const { return is_key_; }
-  uint64_t length() const { return length_; }
+  uint64_t length() const;
   void set_track_number(uint64_t track_number) { track_number_ = track_number; }
   uint64_t track_number() const { return track_number_; }
   void set_timestamp(uint64_t timestamp) { timestamp_ = timestamp; }
@@ -137,11 +153,8 @@ class Frame {
   // Id of the Additional data.
   uint64_t add_id_;
 
-  // Pointer to additional data. Owned by this class.
-  uint8_t* additional_;
-
-  // Length of the additional data.
-  uint64_t additional_length_;
+  // Pointer to additional data.
+  std::shared_ptr<FrameMemory> additional_;
 
   // Duration of the frame in nanoseconds.
   uint64_t duration_;
@@ -152,13 +165,10 @@ class Frame {
   bool duration_set_;
 
   // Pointer to the data. Owned by this class.
-  uint8_t* frame_;
+  std::shared_ptr<FrameMemory> frame_;
 
   // Flag telling if the data should set the key flag of a block.
   bool is_key_;
-
-  // Length of the data.
-  uint64_t length_;
 
   // Mkv track number the data is associated with.
   uint64_t track_number_;
