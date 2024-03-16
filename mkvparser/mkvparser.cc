@@ -1433,6 +1433,9 @@ bool Segment::PreloadCluster(Cluster* pCluster, ptrdiff_t idx) {
     return false;
 
   while (q > p) {
+    if (!q)
+      return false;
+
     Cluster** const qq = q - 1;
 
     if (!qq || (*qq)->m_index >= 0)
